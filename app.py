@@ -6,115 +6,6 @@ import json
 import os
 import re
 import customtkinter as ctk
-
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
-
-CONFIG_FILE = "config.json"
-
-class PingApp(ctk.CTk):
-    def __init__(self):
-        super().__init__()
-
-        self.title("Ping Monitor")
-        self.geometry("640x700")
-        self.resizable(False, False)
-
-        self.max_ips = 10
-        self.is_monitoring = True
-        self.cards = {}
-
-        # Настройки скрытия окна консоли
-        self.startupinfo = None
-        self.creationflags = 0
-        if platform.system().lower() == "windows":
-            self.startupinfo = subprocess.STARTUPINFO()
-            self.startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            self.creationflags = subprocess.CREATE_NO_WINDOW
-
-        # === Панель ввода ===
-        self.input_frame = ctk.CTkFrame(self)
-        self.input_frame.pack(pady=15, padx=20, fill="x")
-
-        self.ip_entry = ctk.CTkEntry(self.input_frame, placeholder_text="IP / Домен (напр. 8.8.8.8)", width=220)
-        self.ip_entry.grid(row=0, column=0, padx=10, pady=10)
-        self.ip_entry.bind("<Return>", lambda event: self.add_ip())
-
-        self.label_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Название (напр. Сервер)", width=180)
-        self.label_entry.grid(row=0, column=1, padx=5, pady=10)
-        self.label_entry.bind("<Return>", lambda event: self.add_ip())
-
-        self.add_btn = ctk.CTkButton(self.input_frame, text="Добавить", command=self.add_ip, width=100)
-        self.add_btn.grid(row=0, column=2, padx=10, pady=10)
-
-        # Счётчик
-        self.counter_label = ctk.CTkLabel(self, text=f"Добавлено: 0 / {self.max_ips}", font=("Arial", 12))
-        self.counter_label.pack(anchor="w", padx=25)
-
-        # === Список элементов ===
-        self.scroll_frame = ctk.CTkScrollableFrame(self, width=580, height=530)
-        self.scroll_frame.pack(pady=10, padx=20, fill="both", expand=True)
-
-        self.load_config()
-
-    def load_config(self):
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    saved_items = json.load(f)
-                    for item in saved_items:
-                        if len(self.cards) < self.max_ips:
-                            self.add_card_to_ui(item["ip"], item.get("name", ""))
-            except Exception as e:
-                print(f"Ошибка чтения конфига: {e}")
-        self.update_counter()
-
-    def save_config(self):
-        data = [{"ip": ip, "name": card["name"]} for ip, card in self.cards.items()]
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-        except Exception as e:
-            print(f"Ошибка сохранения конфига: {e}")
-
-    def add_ip(self):
-        ip = self.ip_entry.get().strip()
-        name = self.label_entry.get().strip()
-
-        if not ip or len(self.cards) >= self.max_ips or ip in self.cards:
-            self.ip_entry.delete(0, 'end')
-            return
-
-        self.add_card_to_ui(ip, name)
-        self.save_config()
-        
-        self.ip_entry.delete(0, 'end')
-        self.label_entry.delete(0, 'end')
-        self.update_counter()
-
-    def remove_ip(self, ip):
-        if ip in self.cards:
-            self.cards[ip]["is_active"] = False
-            self.cards[ip]["frame"].destroy()
-            del self.cards[ip]
-            self.save_config()
-            self.update_counter()
-
-    def update_counter(self):
-        count = len(self.cards)
-        self.counter_label.configure(text=f"Добавлено: {count} / {self.max_ips}")
-        self.add_btn.configure(state="disabled" if count >= self.max_ips else "normal")
-
-    def add_card_to_ui(self, ip, name=""):
-        card_frame = ctk.CTkFrame(self.scroll_frame)
-import subprocess
-import platform
-import threading
-import time
-import json
-import os
-import re
-import customtkinter as ctk
 from tkinter import colorchooser
 
 ctk.set_appearance_mode("Dark")
@@ -238,9 +129,9 @@ class PingApp(ctk.CTk):
         self.add_btn = ctk.CTkButton(self.input_frame, text="Добавить", command=self.add_ip, width=100)
         self.add_btn.grid(row=0, column=2, padx=(5, 10), pady=10)
 
-        # Счётчик
+        # Счётчик (Исправлен параметр anchor="w" на sticky="w")
         self.counter_label = ctk.CTkLabel(self, text=f"Добавлено: 0 / {self.max_ips}", font=("Arial", 12))
-        self.counter_label.grid(row=1, column=0, anchor="w", padx=25, pady=(0, 5))
+        self.counter_label.grid(row=1, column=0, sticky="w", padx=25, pady=(0, 5))
 
         # === Список элементов ===
         self.scroll_frame = ctk.CTkScrollableFrame(self)
@@ -438,7 +329,6 @@ class PingApp(ctk.CTk):
             card = self.cards[ip]
 
             if success:
-                # Восстановление связи
                 if card["offline_since"] is not None:
                     card["offline_since"] = None
                     self.save_config()
@@ -446,7 +336,6 @@ class PingApp(ctk.CTk):
                 ms_value = ping_result
                 display_text = f"{ms_value} ms"
 
-                # Выбор цвета текста на основе порога в 100 ms
                 if ms_value > 100:
                     text_color = "#E67E22"  # Оранжевый
                 else:
@@ -455,7 +344,6 @@ class PingApp(ctk.CTk):
                 card["ping_label"].configure(text=display_text, text_color=text_color)
                 card["offline_label"].configure(text="")
             else:
-                # Фиксация времени обрыва
                 if card["offline_since"] is None:
                     card["offline_since"] = time.time()
                     self.save_config()
@@ -463,7 +351,7 @@ class PingApp(ctk.CTk):
                 elapsed = time.time() - card["offline_since"]
                 time_formatted = self.format_time(elapsed)
 
-                card["ping_label"].configure(text=str(ping_result), text_color="#E74C3C")  # Красный
+                card["ping_label"].configure(text=str(ping_result), text_color="#E74C3C")
                 card["offline_label"].configure(text=f"Сбой: {time_formatted}")
         finally:
             if ip in self.cards:
