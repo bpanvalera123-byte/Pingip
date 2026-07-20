@@ -24,7 +24,7 @@ class PingApp(ctk.CTk):
         self.is_monitoring = True
         self.cards = {}
 
-        # Параметры для скрытия окна консоли на Windows
+        # Настройки скрытия окна консоли
         self.startupinfo = None
         self.creationflags = 0
         if platform.system().lower() == "windows":
@@ -36,21 +36,18 @@ class PingApp(ctk.CTk):
         self.input_frame = ctk.CTkFrame(self)
         self.input_frame.pack(pady=15, padx=20, fill="x")
 
-        # Поле для IP
         self.ip_entry = ctk.CTkEntry(self.input_frame, placeholder_text="IP / Домен (напр. 8.8.8.8)", width=220)
         self.ip_entry.grid(row=0, column=0, padx=10, pady=10)
         self.ip_entry.bind("<Return>", lambda event: self.add_ip())
 
-        # Поле для Подписи
-        self.label_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Название (напр. Сервер 1)", width=180)
+        self.label_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Название (напр. Сервер)", width=180)
         self.label_entry.grid(row=0, column=1, padx=5, pady=10)
         self.label_entry.bind("<Return>", lambda event: self.add_ip())
 
-        # Кнопка добавления
         self.add_btn = ctk.CTkButton(self.input_frame, text="Добавить", command=self.add_ip, width=100)
         self.add_btn.grid(row=0, column=2, padx=10, pady=10)
 
-        # Счётчик элементов
+        # Счётчик
         self.counter_label = ctk.CTkLabel(self, text=f"Добавлено: 0 / {self.max_ips}", font=("Arial", 12))
         self.counter_label.pack(anchor="w", padx=25)
 
@@ -58,11 +55,9 @@ class PingApp(ctk.CTk):
         self.scroll_frame = ctk.CTkScrollableFrame(self, width=580, height=530)
         self.scroll_frame.pack(pady=10, padx=20, fill="both", expand=True)
 
-        # Загрузка сохраненных IP из файла
         self.load_config()
 
     def load_config(self):
-        """Загрузка IP из JSON файла при запуске"""
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -75,13 +70,7 @@ class PingApp(ctk.CTk):
         self.update_counter()
 
     def save_config(self):
-        """Сохранение текущего списка IP в JSON файл"""
-        data = []
-        for ip, card in self.cards.items():
-            data.append({
-                "ip": ip,
-                "name": card["name"]
-            })
+        data = [{"ip": ip, "name": card["name"]} for ip, card in self.cards.items()]
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
@@ -105,7 +94,7 @@ class PingApp(ctk.CTk):
 
     def remove_ip(self, ip):
         if ip in self.cards:
-            self.cards[ip]["is_active"] = False # Останавливаем поток пинга
+            self.cards[ip]["is_active"] = False
             self.cards[ip]["frame"].destroy()
             del self.cards[ip]
             self.save_config()
@@ -120,30 +109,25 @@ class PingApp(ctk.CTk):
         card_frame = ctk.CTkFrame(self.scroll_frame)
         card_frame.pack(fill="x", pady=6, padx=5)
 
-        # Подпись + IP
         display_title = name if name else ip
-        title_label = ctk.CTkLabel(card_frame, text=display_title, font=("Arial", 14, "bold"), width=160, anchor="w")
+        title_label = ctk.CTkLabel(card_frame, text=display_title, font=("Arial", 14, "bold"), width=150, anchor="w")
         title_label.pack(side="left", padx=15, pady=8)
 
-        # Описание (если есть имя, снизу выводим сам IP мелким шрифтом)
         if name:
             sub_label = ctk.CTkLabel(card_frame, text=f"({ip})", font=("Arial", 10), text_color="#888888", anchor="w")
             sub_label.pack(side="left", padx=(0, 10))
 
-        # Поле реального времени для пинга
-        ping_label = ctk.CTkLabel(card_frame, text="-- ms", font=("Arial", 15, "bold"), width=90, text_color="#A0A0A0")
+        ping_label = ctk.CTkLabel(card_frame, text="-- ms", font=("Arial", 15, "bold"), width=100, text_color="#A0A0A0")
         ping_label.pack(side="left", padx=5)
 
-        # Поле таймера сбоя
         offline_label = ctk.CTkLabel(card_frame, text="", font=("Arial", 11), width=120, text_color="#F44336")
         offline_label.pack(side="left", padx=5)
 
-        # Кнопка удаления
         del_btn = ctk.CTkButton(card_frame, text="✕", width=30, height=30, fg_color="#db524b", hover_color="#bc3b34",
                                  command=lambda: self.remove_ip(ip))
         del_btn.pack(side="right", padx=10)
 
-        card_data = {
+        self.cards[ip] = {
             "frame": card_frame,
             "ping_label": ping_label,
             "offline_label": offline_label,
@@ -151,9 +135,8 @@ class PingApp(ctk.CTk):
             "name": name,
             "is_active": True
         }
-        self.cards[ip] = card_data
 
-        # Запускаем отдельный независимый поток для непрерывного пинга этого адреса
+        # Запускаем независимый фоновый поток измерения
         t = threading.Thread(target=self.monitor_host, args=(ip,), daemon=True)
         t.start()
 
@@ -165,6 +148,7 @@ class PingApp(ctk.CTk):
         command = ['ping', param, '1', timeout_param, '1000', host]
 
         try:
+            start_time = time.time()
             output = subprocess.check_output(
                 command,
                 stderr=subprocess.STDOUT,
@@ -174,13 +158,19 @@ class PingApp(ctk.CTk):
             )
             
             if "TTL=" in output or "ttl=" in output:
-                match = re.search(r'(?:time|время)[=<](\d+)\s*(?:ms|мс)', output, re.IGNORECASE)
-                ms = match.group(1) if match else "1"
-                return True, f"{ms} ms"
+                # Находим точное значение времени из ответа
+                match = re.search(r'(?:time|время)[=<]\s*(\d+)\s*(?:ms|мс)?', output, re.IGNORECASE)
+                if match:
+                    ms_val = match.group(1)
+                    return True, f"{ms_val} ms"
+                else:
+                    # Резервный просчет задержки, если утилита ответила "<1мс"
+                    calc_ms = int((time.time() - start_time) * 1000)
+                    return True, f"{max(1, calc_ms)} ms"
             else:
                 return False, "Таймаут"
         except Exception:
-            return False, "Оффлайн"
+            return False, "Недоступен"
 
     def format_time(self, seconds):
         hrs, remainder = divmod(int(seconds), 3600)
@@ -190,7 +180,7 @@ class PingApp(ctk.CTk):
         return f"{mins:02d}:{secs:02d}"
 
     def monitor_host(self, ip):
-        """Индивидуальный поток мониторинга конкретного IP в реальном времени"""
+        """Фоновый поток для каждого IP с частым обновлением"""
         while self.is_monitoring and ip in self.cards and self.cards[ip]["is_active"]:
             success, ping_str = self.ping_host(ip)
             
@@ -201,7 +191,7 @@ class PingApp(ctk.CTk):
             
             if success:
                 card["offline_since"] = None
-                card["ping_label"].configure(text=ping_str, text_color="#2ECC71") # Зелёный
+                card["ping_label"].configure(text=ping_str, text_color="#2ECC71")
                 card["offline_label"].configure(text="")
             else:
                 if card["offline_since"] is None:
@@ -210,11 +200,11 @@ class PingApp(ctk.CTk):
                 elapsed = time.time() - card["offline_since"]
                 time_formatted = self.format_time(elapsed)
                 
-                card["ping_label"].configure(text=ping_str, text_color="#E74C3C") # Красный
+                card["ping_label"].configure(text=ping_str, text_color="#E74C3C")
                 card["offline_label"].configure(text=f"Сбой: {time_formatted}")
 
-            # Пауза 1 секунда между измерениями
-            time.sleep(1.0)
+            # Задержка 0.5 секунды для динамического обновления значения
+            time.sleep(0.5)
 
 if __name__ == "__main__":
     app = PingApp()
