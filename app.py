@@ -488,8 +488,6 @@ class PingApp(ctk.CTk):
 
             time.sleep(0.1)
 
----
-
     def _ping_worker(self, ip):
         try:
             if ip not in self.cards:
